@@ -1,0 +1,5 @@
+Model type,runtime,Train RMSE,Val-RMSE,Test-RMSE,Train MAE,Val-MAE,Test-MAE
+Naive Benchmark (Ridge),873.29 sec,0.4027,0.5944,0.6379,0.3192,0.4707,0.5065
+Character level CNN (Siamese),1983.83 sec,0.3854,0.4886,0.5310,N/A,N/A,0.4265
+FE (Char) + XGBoost,61.27 sec,0.3606,0.4926,0.5503,N/A,N/A,0.4394
+FE (Char) + Ridge,6.17 sec,0.4048,0.4923,0.5489,N/A,N/A,0.4387

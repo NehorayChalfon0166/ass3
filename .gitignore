@@ -1,0 +1,20 @@
+# Data files (Large)
+data/*.csv
+data/*.npz
+data/*.pkl
+data/*.zip
+
+# Generated Outputs
+outputs/*.pt
+outputs/*.npy
+outputs/*.png
+outputs/*.txt
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# OS
+.DS_Store
