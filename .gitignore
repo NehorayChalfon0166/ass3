@@ -1,14 +1,11 @@
-# Data files (Large)
+# Data files (Keep these ignored, partner must download)
 data/*.csv
 data/*.npz
 data/*.pkl
 data/*.zip
 
-# Generated Outputs
-outputs/*.pt
-outputs/*.npy
-outputs/*.png
-outputs/*.txt
+# Allow the output folder contents (Models/Plots)
+!outputs/
 
 # Python
 __pycache__/

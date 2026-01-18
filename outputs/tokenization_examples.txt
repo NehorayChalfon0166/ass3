@@ -1,0 +1,24 @@
+--- Tokenization Examples ---
+Vocabulary Size: 125
+Char to Int Map (First 20): [(' ', 1), ('!', 2), ('"', 3), ('#', 4), ('$', 5), ('%', 6), ('&', 7), ("'", 8), ('(', 9), (')', 10), ('*', 11), ('+', 12), (',', 13), ('-', 14), ('.', 15), ('/', 16), ('0', 17), ('1', 18), ('2', 19), ('3', 20)]...
+
+Example 1:
+  Original: 'angle bracket'
+  Sequence: [66, 79, 72, 77, 70, 1, 67, 83, 66, 68, 76, 70, 85, 0, 0, 0, 0, 0, 0, 0] ... (truncated)
+
+Example 2:
+  Original: 'l bracket'
+  Sequence: [77, 1, 67, 83, 66, 68, 76, 70, 85, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] ... (truncated)
+
+Example 3:
+  Original: 'deck over'
+  Sequence: [69, 70, 68, 76, 1, 80, 87, 70, 83, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] ... (truncated)
+
+Example 4:
+  Original: 'rain shower head'
+  Sequence: [83, 66, 74, 79, 1, 84, 73, 80, 88, 70, 83, 1, 73, 70, 66, 69, 0, 0, 0, 0] ... (truncated)
+
+Example 5:
+  Original: 'shower only faucet'
+  Sequence: [84, 73, 80, 88, 70, 83, 1, 80, 79, 77, 90, 1, 71, 66, 86, 68, 70, 85, 0, 0] ... (truncated)
+
