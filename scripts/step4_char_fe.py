@@ -8,6 +8,7 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import os
 import time
+import joblib
 
 # --- Configuration ---
 DATA_FILE = 'data/dl_data.npz'
@@ -19,11 +20,15 @@ BATCH_SIZE = 128
 EMBEDDING_DIM = 64
 HIDDEN_DIM = 256
 
+# --- Device Config ---
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 # --- Re-define Model Classes (Must match training) ---
 class CharCNNEncoder(nn.Module):
     def __init__(self, vocab_size, emb_dim, hidden_dim):
         super(CharCNNEncoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, emb_dim, padding_idx=0)
+        
         self.convs = nn.Sequential(
             nn.Conv1d(emb_dim, 128, kernel_size=7, padding=3),
             nn.ReLU(),
@@ -59,6 +64,18 @@ class CharDataset(Dataset):
     def __len__(self): return len(self.search)
     def __getitem__(self, idx): return self.search[idx], self.desc[idx]
 
+def load_data():
+    print("Loading data...")
+    if not os.path.exists(DATA_FILE):
+        raise FileNotFoundError(f"{DATA_FILE} not found. Please run step1_preprocess.py first.")
+        
+    with np.load(DATA_FILE, allow_pickle=True) as data:
+        char_to_int = data['char_to_int'].item()
+        vocab_size = len(char_to_int) + 1
+        return (data['X_train_search'], data['X_train_desc'], data['y_train'],
+                data['X_val_search'], data['X_val_desc'], data['y_val'],
+                data['X_test_search'], data['X_test_desc'], vocab_size)
+
 def extract_features(model, loader, device):
     model.eval()
     feats = []
@@ -71,11 +88,15 @@ def extract_features(model, loader, device):
             h2 = h2.cpu().numpy()
             
             # Create Interaction Features
+            # 1. Absolute Difference
             diff = np.abs(h1 - h2)
+            # 2. Element-wise Product
             prod = h1 * h2
+            # 3. Cosine Similarity
             cosine = np.sum(h1 * h2, axis=1, keepdims=True) / (
                 np.linalg.norm(h1, axis=1, keepdims=True) * np.linalg.norm(h2, axis=1, keepdims=True) + 1e-8
             )
+            # 4. Euclidean Distance
             euclid = np.linalg.norm(h1 - h2, axis=1, keepdims=True)
             
             # Concatenate all
@@ -96,12 +117,50 @@ def log_results(model_name, runtime, train_rmse, val_rmse, train_mae, val_mae):
         'Val-MAE': f"{val_mae:.4f}",
         'Test-MAE': "N/A (See evaluate.py)"
     }])
-    res_df.to_csv(RESULTS_FILE, mode='a', header=not os.path.exists(RESULTS_FILE), index=False)
+    header = not os.path.exists(RESULTS_FILE)
+    res_df.to_csv(RESULTS_FILE, mode='a', header=header, index=False)
 
 def main():
-    # ... (existing loading and feature extraction code) ...
-
-    # 4. Train Model 1: XGBoost on Char Features...
+    print(f"Using device: {device}")
+    
+    # 1. Load Data
+    X_s_tr, X_d_tr, y_train, X_s_val, X_d_val, y_val, X_s_te, X_d_te, vocab_size = load_data()
+    
+    # 2. Load Siamese Model
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(f"{MODEL_PATH} not found. Run train_model.py first.")
+        
+    print(f"Loading Siamese model from {MODEL_PATH}...")
+    # Load state dict but filter out FC layers since we changed init args potentially, 
+    # or just use strict=False if architecture is identical. 
+    # Actually, the SiameseCNN class here matches the training one, so strict load works.
+    siamese = SiameseCNN(vocab_size, EMBEDDING_DIM, HIDDEN_DIM).to(device)
+    
+    # Note: We need to load state_dict carefully. 
+    # The saved model has the full architecture including the final FC layers.
+    # Our feature extractor definition here only has 'encoder'.
+    # So we load the state dict and only keep keys starting with 'encoder'.
+    state_dict = torch.load(MODEL_PATH, map_location=device)
+    encoder_state_dict = {k: v for k, v in state_dict.items() if k.startswith('encoder')}
+    siamese.load_state_dict(encoder_state_dict)
+    
+    # 3. Extract Features
+    print("Extracting features (this may take a while)...")
+    
+    train_loader = DataLoader(CharDataset(X_s_tr, X_d_tr), batch_size=BATCH_SIZE, shuffle=False)
+    val_loader = DataLoader(CharDataset(X_s_val, X_d_val), batch_size=BATCH_SIZE, shuffle=False)
+    test_loader = DataLoader(CharDataset(X_s_te, X_d_te), batch_size=BATCH_SIZE, shuffle=False)
+    
+    X_train_feats = extract_features(siamese, train_loader, device)
+    print(f"Train features shape: {X_train_feats.shape}")
+    
+    X_val_feats = extract_features(siamese, val_loader, device)
+    print(f"Val features shape: {X_val_feats.shape}")
+    
+    X_test_feats = extract_features(siamese, test_loader, device)
+    print(f"Test features shape: {X_test_feats.shape}")
+    
+    # 4. Train Model 1: XGBoost on Char Features
     print("\nTraining Model 1: XGBoost on Char Features...")
     start = time.time()
     xgb_model = xgb.XGBRegressor(
@@ -127,9 +186,10 @@ def main():
     
     # Save XGB Preds
     te_pred = xgb_model.predict(X_test_feats)
+    te_pred = np.clip(te_pred, 1.0, 3.0)
     np.save(SUBMISSION_XGB, te_pred)
     
-    # 5. Train Model 2: Ridge on Char Features...
+    # 5. Train Model 2: Ridge on Char Features
     print("\nTraining Model 2: Ridge on Char Features...")
     start = time.time()
     ridge_model = Ridge(alpha=1.0)
@@ -147,9 +207,9 @@ def main():
     print(f"Ridge Results - Train RMSE: {tr_rmse:.4f}, Val RMSE: {val_rmse:.4f}")
     log_results("FE (Char) + Ridge", rt, tr_rmse, val_rmse, tr_mae, val_mae)
 
-    
     # Save Ridge Preds
     te_pred = ridge_model.predict(X_test_feats)
+    te_pred = np.clip(te_pred, 1.0, 3.0)
     np.save(SUBMISSION_RIDGE, te_pred)
     
     print("\nDone with Char Feature Extraction!")
